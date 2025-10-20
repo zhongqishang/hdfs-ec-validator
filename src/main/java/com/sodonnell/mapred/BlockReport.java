@@ -5,6 +5,7 @@ import org.apache.hadoop.io.WritableComparable;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public class BlockReport implements WritableComparable<BlockReport> {
 
@@ -14,6 +15,7 @@ public class BlockReport implements WritableComparable<BlockReport> {
   private boolean hasZeroParity;
   private boolean failed;
   private String message = "";
+  private List<Integer> corruptBlockId;
 
   public BlockReport setBlockGroup(String blockGroup) {
     this.blockGroup = blockGroup;
@@ -69,6 +71,15 @@ public class BlockReport implements WritableComparable<BlockReport> {
     return message;
   }
 
+  public BlockReport setCorruptBlockId(List<Integer> blockIds) {
+      this.corruptBlockId = blockIds;
+      return this;
+  }
+  
+  public List<Integer> corruptBlockId() {
+      return corruptBlockId;
+  }
+  
   public void clear() {
     blockGroup = null;
     stripesChecked = 0;

@@ -3,11 +3,13 @@ package com.sodonnell;
 import com.sodonnell.exceptions.MisalignedBuffersException;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.io.erasurecode.ErasureCoderOptions;
+import org.apache.hadoop.io.erasurecode.rawcoder.RSRawDecoder;
 import org.apache.hadoop.io.erasurecode.rawcoder.RSRawEncoder;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -146,4 +148,115 @@ public class ECChecker {
     }
   }
 
+  public static List<Integer> findCorruptBlockId(ByteBuffer[] buf, ErasureCodingPolicy ecPolicy)
+      throws IOException {
+    int dataNum = ecPolicy.getNumDataUnits();
+    int parityNum = ecPolicy.getNumParityUnits();
+    int cellSize = ecPolicy.getCellSize();
+
+    padDataBuffers(buf, dataNum);
+
+    RSRawDecoder decoder = new RSRawDecoder(new ErasureCoderOptions(dataNum, parityNum));
+    List<RecreateInfo> recreateInfoList = generateEraseCombinations(dataNum);
+
+    for (RecreateInfo recreateInfo : recreateInfoList) {
+      int[] recreate = recreateInfo.getRecreate();
+      ByteBuffer[] toDecode = generateBuffersForRecovery(buf, recreate);
+      ByteBuffer[] recovered = generateBuffersOfSize(recreate.length, cellSize);
+      decoder.decode(toDecode, recreate, recovered);
+
+      boolean isDataCorrupt = false;
+      List<Integer> corruptBlockIds = new ArrayList<>();
+      for (int i = 0; i < recovered.length; i++) {
+        int index = recreate[i];
+        if (recovered[i].compareTo(buf[index]) == 0) {
+          isDataCorrupt = true;
+        }
+        // 损坏的 data 块
+        else {
+          corruptBlockIds.add(index);
+        }
+      }
+      if (isDataCorrupt) {
+        if (corruptBlockIds.isEmpty()) {
+          continue;
+        }
+        return corruptBlockIds;
+      }
+    }
+    // parity 损坏
+    return Collections.emptyList();
+  }
+
+  private static ByteBuffer[] generateBuffersForRecovery(ByteBuffer[] data, int... remove) {
+    ByteBuffer[] outputs = new ByteBuffer[data.length];
+    for (int i = 0; i < data.length; i++) {
+      outputs[i] = data[i];
+      outputs[i].position(0);
+    }
+    for (int i : remove) {
+      outputs[i] = null;
+    }
+    return outputs;
+  }
+
+  private static ByteBuffer[] generateBuffersOfSize(int num, int size) {
+    ByteBuffer[] outputs = new ByteBuffer[num];
+    for (int i = 0; i < num; i++) {
+      outputs[i] = ByteBuffer.allocate(size);
+    }
+    return outputs;
+  }
+
+  private static List<RecreateInfo> generateEraseCombinations(Integer dataNum) {
+    List<Integer> dataIndices = new ArrayList<>();
+    for (int i = 0; i < dataNum; i++) {
+      dataIndices.add(i);
+    }
+    // 计算需要的元素数量（半数以上）
+    int minSize =
+        dataIndices.size() % 2 == 0 ? dataIndices.size() / 2 : (dataIndices.size() / 2) + 1;
+    Collections.shuffle(dataIndices);
+    List<RecreateInfo> combinations = new ArrayList<>();
+
+    RecreateInfo recreateInfo1 =
+        new RecreateInfo(
+            dataIndices.subList(0, minSize).stream().mapToInt(Integer::intValue).sorted().toArray(),
+            dataIndices.subList(minSize, dataIndices.size()).stream()
+                .mapToInt(Integer::intValue)
+                .sorted()
+                .toArray());
+    combinations.add(recreateInfo1);
+    RecreateInfo recreateInfo2 =
+        new RecreateInfo(
+            dataIndices.subList(dataIndices.size() - minSize, dataIndices.size()).stream()
+                .mapToInt(Integer::intValue)
+                .sorted()
+                .toArray(),
+            dataIndices.subList(0, dataIndices.size() - minSize).stream()
+                .mapToInt(Integer::intValue)
+                .sorted()
+                .toArray());
+
+    combinations.add(recreateInfo2);
+    return combinations;
+  }
+
+  static class RecreateInfo {
+    private final int[] inputIndexes;
+    private final int[] recreate;
+
+    public RecreateInfo(int[] inputIndexes, int[] recreate) {
+      this.inputIndexes = inputIndexes;
+      this.recreate = recreate;
+    }
+
+    public int[] getInputIndexes() {
+      return inputIndexes;
+    }
+
+    public int[] getRecreate() {
+      return recreate;
+    }
+  }
 }
