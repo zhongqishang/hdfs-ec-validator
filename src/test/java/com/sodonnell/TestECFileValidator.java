@@ -300,6 +300,51 @@ public class TestECFileValidator {
           ECValidatorConfigKeys.ECVALIDATOR_VERIFY_CHECKSUMS_DEFAULT);
     }
   }
+  
+  @Test
+  public void testCorruptionWithDataFileOfZeros() throws Exception {
+    //  Not enough replicas was chosen. Reason: {NODE_TOO_BUSY=2}
+    Path ecFile = new Path(ecRoot, "ecFile");
+    
+    // write 3 full stripes - that will be two blocks (block size of 2MB)
+    int bytes = ecPolicy.getNumDataUnits() * ecPolicy.getCellSize() * 3;
+    createFileOfLength(ecFile, bytes);
+    
+    LocatedBlocks blocks = client.getNamenode().getBlockLocations("/ecfiles/ecFile", 0, bytes);
+    LocatedStripedBlock blockGroup = (LocatedStripedBlock) blocks.getLocatedBlocks().get(0);
+    final LocatedBlock[] blks = StripedBlockUtil.parseStripedBlockGroup(
+            blockGroup, ecPolicy.getCellSize(), ecPolicy.getNumDataUnits(), ecPolicy.getNumParityUnits());
+    
+    LocatedBlock dataLb = blks[ecPolicy.getNumDataUnits()-1];
+    int DNPort = dataLb.getLocations()[0].getIpcPort();
+    int DNIndex = findDNIndex(DNPort);
+    
+    File dataFile = cluster.getBlockFile(DNIndex, dataLb.getBlock());
+    
+    // Zero add some non-zero in the second stripe of the parity
+    RandomAccessFile f = new RandomAccessFile(dataFile, "rw");
+    f.seek(ecPolicy.getCellSize());
+    f.write((byte)1);
+    f.close();
+    
+    try {
+      conf.setBoolean(ECValidatorConfigKeys.ECVALIDATOR_VERIFY_CHECKSUMS, false);
+      ECFileValidator validator = new ECFileValidator(conf);
+      
+      // First stripe should be valid, but parity is reported as zeros
+      ValidationReport report = validator.validate("/ecfiles/ecFile", true);
+      assertEquals(true, report.isHealthy());
+      
+      // Second stripe is corrupt, parity still all zeros as the other parity blocks
+      // will have zeros in them.
+      report = validator.validate("/ecfiles/ecFile", false);
+      assertEquals(false, report.isHealthy());
+      assertEquals(true, report.isCorrupt());
+    } finally {
+      conf.setBoolean(ECValidatorConfigKeys.ECVALIDATOR_VERIFY_CHECKSUMS,
+              ECValidatorConfigKeys.ECVALIDATOR_VERIFY_CHECKSUMS_DEFAULT);
+    }
+  }
 
 
   private int findDNIndex(int ipcPort) throws Exception {

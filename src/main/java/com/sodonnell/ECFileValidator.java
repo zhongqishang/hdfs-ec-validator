@@ -7,7 +7,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSClient;
-import org.apache.hadoop.hdfs.protocol.DatanodeInfoWithStorage;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
@@ -22,7 +21,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -128,7 +126,7 @@ public class ECFileValidator implements Closeable {
         report.addZeroParityBlockGroup(blockReport.blockGroup(), blockReport.stripesChecked(), blockReport.message());
       }
       if (blockReport.isCorrupt()) {
-        report.addCorruptBlockGroup(blockReport.blockGroup(), blockReport.stripesChecked());
+        report.addCorruptBlockGroup(blockReport.blockGroup(), blockReport.stripesChecked(), blockReport.message());
       } else {
         report.addValidBlockGroup(blockReport.blockGroup(), blockReport.stripesChecked());
       }
@@ -155,20 +153,6 @@ public class ECFileValidator implements Closeable {
         }
         if (!ECChecker.validateParity(stripe, ecPolicy)) {
           report.setIsCorrupt(true);
-          List<Integer> corruptBlockId = ECChecker.findCorruptBlockId(stripe, ecPolicy);
-          if (corruptBlockId.isEmpty()) {
-            report.setMessage("Could not determine corrupt block IDs, possibly multiple blocks are corrupt.");
-          }
-          DatanodeInfoWithStorage[] locations = sb.getLocations();
-          report.setCorruptBlockId(corruptBlockId);
-          StringBuilder corruptBlockIds = new StringBuilder();
-          for (Integer i : corruptBlockId) {
-            String hostName = locations[i].getHostName();
-            corruptBlockIds.append(hostName);
-            String storageID = locations[i].getStorageID();
-            corruptBlockIds.append("[").append(storageID).append("], ");
-          }
-          report.setMessage(corruptBlockIds.toString());
           break;
         }
         if (checkOnlyFirstStripe) {
@@ -179,6 +163,16 @@ public class ECFileValidator implements Closeable {
         String details = getZeroParityBlocks(br, ecPolicy, nonZeroParityIndicies);
         report.setHasZeroParity(true);
         report.setMessage(details);
+      } else {
+        if (report.isCorrupt()) {
+          Set<Integer> corruptBlockId = ECChecker.findCorruptBlockId(stripe, ecPolicy);
+          if (corruptBlockId.isEmpty()) {
+            report.setMessage(
+                "Could not determine corrupt block IDs, possibly multiple blocks are corrupt.");
+          } else {
+            report.setMessage(getCorruptDataBlocks(br, ecPolicy, corruptBlockId));
+          }
+        }
       }
       report.setStripesChecked(stripeNum);
     }
@@ -190,6 +184,25 @@ public class ECFileValidator implements Closeable {
     boolean first = true;
     for (int i=ecPolicy.getNumDataUnits(); i<ecPolicy.getNumDataUnits() + ecPolicy.getNumParityUnits(); i++) {
       if (!nonZeroIndicies.contains(i)) {
+        if (first) {
+          first = false;
+          bldr.append("[");
+        } else {
+          bldr.append("|");
+        }
+        LocatedBlock block = sb.getBlockAtIndex(i);
+        block.getBlock().getLocalBlock().appendStringTo(bldr);
+      }
+    }
+    bldr.append("]");
+    return bldr.toString();
+  }
+  
+  private String getCorruptDataBlocks(StripedBlockReader sb, ErasureCodingPolicy ecPolicy, Set<Integer> corruptIndicies) {
+    StringBuilder bldr = new StringBuilder();
+    boolean first = true;
+    for (int i=0; i<ecPolicy.getNumDataUnits(); i++) {
+      if (corruptIndicies.contains(i)) {
         if (first) {
           first = false;
           bldr.append("[");

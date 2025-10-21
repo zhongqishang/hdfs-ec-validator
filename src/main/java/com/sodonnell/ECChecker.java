@@ -148,7 +148,7 @@ public class ECChecker {
     }
   }
 
-  public static List<Integer> findCorruptBlockId(ByteBuffer[] buf, ErasureCodingPolicy ecPolicy)
+  public static Set<Integer> findCorruptBlockId(ByteBuffer[] buf, ErasureCodingPolicy ecPolicy)
       throws IOException {
     int dataNum = ecPolicy.getNumDataUnits();
     int parityNum = ecPolicy.getNumParityUnits();
@@ -166,7 +166,7 @@ public class ECChecker {
       decoder.decode(toDecode, recreate, recovered);
 
       boolean isDataCorrupt = false;
-      List<Integer> corruptBlockIds = new ArrayList<>();
+      Set<Integer> corruptBlockIds = new HashSet<>();
       for (int i = 0; i < recovered.length; i++) {
         int index = recreate[i];
         if (recovered[i].compareTo(buf[index]) == 0) {
@@ -185,7 +185,7 @@ public class ECChecker {
       }
     }
     // parity 损坏
-    return Collections.emptyList();
+    return Collections.emptySet();
   }
 
   private static ByteBuffer[] generateBuffersForRecovery(ByteBuffer[] data, int... remove) {

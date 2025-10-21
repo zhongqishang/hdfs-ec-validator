@@ -21,9 +21,13 @@ public class ValidationReport {
   public void addFailedBlockGroup(String blkGroup, int stripesChecked, String details) {
     failedBlockGroups.add(new Entry(blkGroup, stripesChecked, details));
   }
-
+  
   public void addCorruptBlockGroup(String blkGroup, int stripesChecked) {
     corruptBlockGroups.add(new Entry(blkGroup, stripesChecked));
+  }
+
+  public void addCorruptBlockGroup(String blkGroup, int stripesChecked, String details) {
+    corruptBlockGroups.add(new Entry(blkGroup, stripesChecked, details));
   }
 
   public void addValidBlockGroup(String blkGroup, int stripesChecked) {

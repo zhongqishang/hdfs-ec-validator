@@ -130,7 +130,7 @@ public class ValidateFiles extends Configured implements Tool {
     conf.set(TextOutputFormat.SEPARATOR, fieldSeparator);
 
     // Create job
-    Job job = Job.getInstance(conf, "EC-File-Validator");
+    Job job = Job.getInstance(conf);
     job.setJarByClass(getClass());
 
     // Setup MapReduce
