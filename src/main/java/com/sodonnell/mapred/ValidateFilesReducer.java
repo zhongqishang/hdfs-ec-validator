@@ -12,11 +12,11 @@ import java.util.List;
 
 public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text> {
 
-  private Text failed = new Text("failed");
-  private Text corrupt = new Text("corrupt");
-  private Text healthy = new Text("healthy");
+  private final Text failed = new Text("failed");
+  private final Text corrupt = new Text("corrupt");
+  private final Text healthy = new Text("healthy");
 
-  private Text message = new Text();
+  private final Text message = new Text();
 
   private String fs = null;
 
@@ -47,7 +47,7 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
         failedBlocks.add(r.blockGroup());
       }
       if (r.isCorrupt()) {
-        corruptBlocks.add(r.blockGroup());
+        corruptBlocks.add(r.blockGroup()+r.message());
       }
       if (r.hasZeroParity()) {
         zeroParity.add(r.blockGroup()+r.message());
@@ -61,7 +61,7 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
     }
 
     if (fileFailure) {
-      context.write(failed, new Text(file + fs + sb.toString()));
+      context.write(failed, new Text(file + fs + sb));
       return;
     }
 
@@ -69,23 +69,23 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
     appendBlocksWithMessage(sb, "zero parity block groups", zeroParity);
     appendBlocksWithMessage(sb, "failed block groups", failedBlocks);
 
-    if (failedBlocks.size() > 0) {
-      context.write(failed, new Text(file + fs + sb.toString()));
-    } else if (corruptBlocks.size() > 0) {
-      context.write(corrupt, new Text(file + fs + sb.toString()));
+    if (!failedBlocks.isEmpty()) {
+      context.write(failed, new Text(file + fs + sb));
+    } else if (!corruptBlocks.isEmpty()) {
+      context.write(corrupt, new Text(file + fs + sb));
     } else {
       context.write(healthy, new Text(file + fs));
     }
   }
 
   private void appendBlocksWithMessage(StringBuilder sb, String msg, List<String> blocks) {
-    if (blocks.size() == 0) {
+    if (blocks.isEmpty()) {
       return;
     }
     if (sb.length() > 0) {
       sb.append(" ");
     }
-    sb.append(msg + " {");
+    sb.append(msg).append(" {");
     sb.append(StringUtils.join(blocks, ","));
     sb.append("}");
   }
