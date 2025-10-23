@@ -45,7 +45,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- for upstream hadoop versions just use "3.3.0", for example -->
-        <hadoop.version>3.3.6</hadoop.version>
+        <hadoop.version>3.1.1</hadoop.version>
         <mockito.version>4.11.0</mockito.version>
     </properties>
     

@@ -90,7 +90,8 @@ public class TestStripedBlockReader {
       for (int i = 0; i < ecPolicy.getNumDataUnits(); i++) {
         FSDataInputStream out = fs.open(ecFile);
         ByteBuffer fbuf = ByteBuffer.allocate(ecPolicy.getCellSize());
-        out.read(i * ecPolicy.getCellSize(), fbuf);
+        out.seek((long) i * ecPolicy.getCellSize());
+        out.read(fbuf);
         fbuf.position(0);
         out.close();
         assertEquals(0, fbuf.compareTo(buffers[i]));
