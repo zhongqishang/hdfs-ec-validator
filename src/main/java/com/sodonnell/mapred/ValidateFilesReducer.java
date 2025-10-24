@@ -5,12 +5,15 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text> {
+  private static final Logger LOG = LoggerFactory.getLogger(ValidateFilesReducer.class);
 
   private final Text failed = new Text("failed");
   private final Text corrupt = new Text("corrupt");
@@ -74,7 +77,8 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
     } else if (!corruptBlocks.isEmpty()) {
       context.write(corrupt, new Text(file + fs + sb));
     } else {
-      context.write(healthy, new Text(file + fs));
+      // context.write(healthy, new Text(file + fs));
+      LOG.info("{} is healthy", file + fs);
     }
   }
 
