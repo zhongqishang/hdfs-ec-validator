@@ -192,7 +192,9 @@ public class ECFileValidator implements Closeable {
         }
         LocatedBlock block = sb.getBlockAtIndex(i);
         block.getBlock().getLocalBlock().appendStringTo(bldr);
-        bldr.append("-").append(block.getLocations()[0].getIpAddr());
+        if (block.getLocations() != null && block.getLocations().length > 0) {
+          bldr.append("-").append(block.getLocations()[0].getIpAddr());
+        }
       }
     }
     bldr.append("]");
