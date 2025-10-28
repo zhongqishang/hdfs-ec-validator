@@ -17,6 +17,7 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
 
   private final Text failed = new Text("failed");
   private final Text corrupt = new Text("corrupt");
+  private final Text overStorage = new Text("overStorage");
   private final Text healthy = new Text("healthy");
 
   private final Text message = new Text();
@@ -38,6 +39,7 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
     List<String> failedBlocks = new ArrayList<>();
     boolean fileFailure = false;
     String firstFailureReason = null;
+    boolean isOver3TimesStorage = false;
     for (BlockReport r : values) {
       if (r.failed()) {
         if (firstFailureReason == null) {
@@ -54,6 +56,9 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
       }
       if (r.hasZeroParity()) {
         zeroParity.add(r.blockGroup()+r.message());
+      }
+      if (r.isOver3TimesStorage()) {
+        isOver3TimesStorage = true;
       }
     }
 
@@ -76,6 +81,8 @@ public class ValidateFilesReducer extends Reducer<Text, BlockReport, Text, Text>
       context.write(failed, new Text(file + fs + sb));
     } else if (!corruptBlocks.isEmpty()) {
       context.write(corrupt, new Text(file + fs + sb));
+    } else if (isOver3TimesStorage) {
+      context.write(overStorage, new Text(file + fs + sb));
     } else {
       // context.write(healthy, new Text(file + fs));
       LOG.info("{} is healthy", file + fs);

@@ -14,6 +14,7 @@ public class BlockReport implements WritableComparable<BlockReport> {
   private boolean isCorrupt;
   private boolean hasZeroParity;
   private boolean failed;
+  private boolean over3TimesStorage = false;
   private String message = "";
   private Set<Integer> corruptBlockId;
 
@@ -61,7 +62,16 @@ public class BlockReport implements WritableComparable<BlockReport> {
   public boolean failed() {
     return failed;
   }
-
+  
+  public boolean isOver3TimesStorage() {
+    return over3TimesStorage;
+  }
+  
+  public BlockReport setOver3TimesStorage(boolean over3TimesStorage) {
+    this.over3TimesStorage = over3TimesStorage;
+    return this;
+  }
+  
   public BlockReport setMessage(String msg) {
     this.message = msg;
     return this;

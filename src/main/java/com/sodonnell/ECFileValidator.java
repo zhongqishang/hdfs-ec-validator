@@ -1,5 +1,6 @@
 package com.sodonnell;
 
+import com.sodonnell.exceptions.BlockUnavailableException;
 import com.sodonnell.exceptions.NotErasureCodedException;
 import com.sodonnell.mapred.BlockReport;
 import org.apache.hadoop.conf.Configuration;
@@ -7,11 +8,15 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoStriped;
+import org.apache.hadoop.hdfs.server.namenode.QuotaCounts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,6 +78,26 @@ public class ECFileValidator implements Closeable {
     LOG.info("Going to validate {} with {} blocks", src, fileBlocks.getLocatedBlocks().size());
     ByteBuffer[] stripe = ECValidateUtil.allocateBuffers(
         ecPolicy.getNumDataUnits() + ecPolicy.getNumParityUnits(), ecPolicy.getCellSize());
+    
+    BlockInfo[] blocks = new BlockInfo[fileBlocks.getLocatedBlocks().size()];
+    for (int i = 0; i < fileBlocks.getLocatedBlocks().size(); i++) {
+      Block localBlock = fileBlocks.getLocatedBlocks().get(i).getBlock().getLocalBlock();
+      BlockInfoStriped blockInfoStriped = new BlockInfoStriped(localBlock, ecPolicy);
+      blocks[i] = blockInfoStriped;
+    }
+
+    boolean over3TimesStorage;
+    // 大于 100mb 的文件才进行存储空间检查
+    if (fileBlocks.getFileLength() > 100 * 1024 * 1024L) {
+      QuotaCounts quotaCounts = storageSpaceConsumedStriped(blocks);
+      long storageSpace = quotaCounts.getStorageSpace();
+      over3TimesStorage = (double) storageSpace / fileBlocks.getFileLength() > 3;
+      if (over3TimesStorage) {
+        LOG.info("Validating {} blocks over 3 times.", src);
+      }
+    } else {
+      over3TimesStorage = false;
+    }
 
     final Iterator<LocatedBlock> blockItr = fileBlocks.getLocatedBlocks().iterator();
 
@@ -90,7 +115,9 @@ public class ECFileValidator implements Closeable {
         {
           LocatedStripedBlock sb = (LocatedStripedBlock)blockItr.next();
           try {
-            return processBlock(sb, ecPolicy, checkOnlyFirstStripe, stripe);
+            BlockReport blockReport = processBlock(sb, ecPolicy, checkOnlyFirstStripe, stripe);
+            blockReport.setOver3TimesStorage(over3TimesStorage);
+            return blockReport;
           } catch (Exception e) {
             LOG.warn("Failed processing {}", sb, e);
             return new BlockReport()
@@ -109,6 +136,15 @@ public class ECFileValidator implements Closeable {
         throw new UnsupportedOperationException("Removals are not supported");
       }
     };
+  }
+
+  public final QuotaCounts storageSpaceConsumedStriped(BlockInfo[] blocks) {
+    QuotaCounts counts = new QuotaCounts.Builder().build();
+    for (BlockInfo b : blocks) {
+      long blockSize = b.isComplete() ? ((BlockInfoStriped) b).spaceConsumed() : -1;
+      counts.addStorageSpace(blockSize);
+    }
+    return counts;
   }
 
   public ValidationReport validate(String src, boolean checkOnlyFirstStripe) throws Exception {
